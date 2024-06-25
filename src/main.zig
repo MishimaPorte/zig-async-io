@@ -22,14 +22,15 @@ pub fn main() !void {
         },
     };
     try posix.epoll_ctl(epoll_fd, linux.EPOLL.CTL_ADD, server.stream.handle, &event);
+    const out_fd = try posix.open("./testdata/text", .{ .ACCMODE = .RDONLY }, 0o666);
 
     var tpool: [10]std.Thread = undefined;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa_allocator = gpa.allocator();
     for (0..10) |i| {
-        tpool[i] = try std.Thread.spawn(.{}, worker.work, .{ &gpa_allocator, epoll_fd, server.stream.handle, i + 1 });
+        tpool[i] = try std.Thread.spawn(.{}, worker.work, .{ &gpa_allocator, out_fd, epoll_fd, server.stream.handle, i + 1 });
         tpool[i].detach();
     }
-    worker.work(&gpa_allocator, epoll_fd, server.stream.handle, 0);
+    worker.work(&gpa_allocator, out_fd, epoll_fd, server.stream.handle, 0);
     return void{};
 }

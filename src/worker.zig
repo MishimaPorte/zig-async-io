@@ -46,7 +46,7 @@ fn acceptNew(allocator: *const std.mem.Allocator, epoll_fd: i32, tid: usize, ev:
     };
 }
 
-fn readIncoming(allocator: *const std.mem.Allocator, epoll_fd: i32, tid: usize, ev: *linux.epoll_event) void {
+fn readIncoming(allocator: *const std.mem.Allocator, out_fd: posix.fd_t, epoll_fd: i32, tid: usize, ev: *linux.epoll_event) void {
     const state: *EpollState = @ptrFromInt(ev.data.ptr);
     if (ev.events != 1) {
         defer allocator.destroy(state);
@@ -89,20 +89,33 @@ fn readIncoming(allocator: *const std.mem.Allocator, epoll_fd: i32, tid: usize, 
             return;
         };
     } else {
-        _ = posix.write(state.fd, state.data[0..state.read]) catch |err| {
+        // _ = posix.write(state.fd, state.data[0..state.read]) catch |err| {
+        // const iovecs: []const posix.iovec_const = &[_]posix.iovec_const{};
+        _ = out_fd;
+        _ = posix.write(state.fd,
+            \\HTTP/1.1 200 OK
+            \\Server: kek
+            \\Content-Length: 0
+            \\
+            \\
+        ) catch |err| {
             std.log.err("t[{d}]: error in writing to socket: {}", .{ tid, err });
             return;
         };
+        // _ = posix.sendfile(state.fd, out_fd, 0, 5368709120, iovecs, iovecs, 0) catch |err| {
+        //     std.log.err("t[{d}]: error in writing to socket: {}", .{ tid, err });
+        //     return;
+        // };
         state.read = 0;
     }
 }
 
-pub fn work(allocator: *const std.mem.Allocator, epoll_fd: i32, listen_fd: i32, tid: usize) void {
+pub fn work(allocator: *const std.mem.Allocator, out_fd: i32, epoll_fd: i32, listen_fd: i32, tid: usize) void {
     var events: [event_count]linux.epoll_event = undefined;
     while (true) {
         const ev_count = linux.epoll_wait(epoll_fd, &events, event_count, 0);
         for (events[0..ev_count]) |*ev| {
-            if (ev.data.fd == listen_fd) acceptNew(allocator, epoll_fd, tid, ev) else readIncoming(allocator, epoll_fd, tid, ev);
+            if (ev.data.fd == listen_fd) acceptNew(allocator, epoll_fd, tid, ev) else readIncoming(allocator, out_fd, epoll_fd, tid, ev);
         }
     }
 }
