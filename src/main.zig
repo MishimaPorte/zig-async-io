@@ -16,21 +16,24 @@ pub fn main() !void {
     defer posix.close(epoll_fd);
 
     var event = linux.epoll_event{
+        // .events = linux.EPOLL.IN | linux.EPOLL.ET | linux.EPOLL.ONESHOT,
         .events = linux.EPOLL.IN,
         .data = linux.epoll_data{
             .fd = server.stream.handle,
         },
     };
     try posix.epoll_ctl(epoll_fd, linux.EPOLL.CTL_ADD, server.stream.handle, &event);
-    const out_fd = try posix.open("./testdata/text", .{ .ACCMODE = .RDONLY }, 0o666);
 
     var tpool: [10]std.Thread = undefined;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa_allocator = gpa.allocator();
+    const out_fd = try posix.open("./testdata/text", .{ .ACCMODE = .RDONLY, .NONBLOCK = false }, 0o666);
     for (0..10) |i| {
+        // const out_fd = try posix.open("./testdata/text", .{ .ACCMODE = .RDONLY, .NONBLOCK = false }, 0o666);
         tpool[i] = try std.Thread.spawn(.{}, worker.work, .{ &gpa_allocator, out_fd, epoll_fd, server.stream.handle, i + 1 });
         tpool[i].detach();
     }
+    // const out_fd = try posix.open("./testdata/text", .{ .ACCMODE = .RDONLY, .NONBLOCK = false }, 0o666);
     worker.work(&gpa_allocator, out_fd, epoll_fd, server.stream.handle, 0);
     return void{};
 }
