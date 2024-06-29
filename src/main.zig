@@ -5,7 +5,7 @@ const linux = std.os.linux;
 const posix = std.posix;
 
 pub fn main() !void {
-    const listen_address = net.Address.initIp4(.{ 127, 0, 0, 1 }, 1111);
+    const listen_address = net.Address.initIp4(.{ 127, 0, 0, 1 }, 2282);
     const server = listen_address.listen(.{
         .reuse_address = true,
     }) catch |err| return err;
