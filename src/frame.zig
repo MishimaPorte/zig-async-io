@@ -7,59 +7,79 @@ pub const body_start = 1 + 2 + 4 + 2 + 2;
 
 pub const Class = struct {
     pub const Connection = struct {
-        pub const id = 10;
-        pub const start = 10;
-        pub const start_ok = 11;
-        pub const secure = 20;
-        pub const secure_ok = 21;
-        pub const tune = 30;
-        pub const tune_ok = 31;
-        pub const open = 40;
-        pub const open_ok = 41;
-        pub const close = 50;
-        pub const close_ok = 51;
+        pub const id: u16 = 10;
+        pub const Method = enum(u16) {
+            start = 10,
+            start_ok = 11,
+            secure = 20,
+            secure_ok = 21,
+            tune = 30,
+            tune_ok = 31,
+            open = 40,
+            open_ok = 41,
+            close = 50,
+            close_ok = 51,
+            pub fn asU16(self: @This()) u16 {
+                return @intFromEnum(self);
+            }
+        };
     };
     pub const Channel = struct {
-        pub const id = 20;
-        pub const open = 10;
-        pub const open_ok = 11;
-        pub const flow = 20;
-        pub const flow_ok = 21;
-        pub const close = 40;
-        pub const close_ok = 41;
+        pub const id: u16 = 20;
+        pub const Method = enum(u16) {
+            open = 10,
+            open_ok = 11,
+            flow = 20,
+            flow_ok = 21,
+            close = 40,
+            close_ok = 41,
+            pub fn asU16(self: @This()) u16 {
+                return @intFromEnum(self);
+            }
+        };
     };
     pub const Queue = struct {
-        pub const id = 50;
-        pub const declare = 10;
-        pub const declare_ok = 11;
-        pub const bind = 20;
-        pub const bind_ok = 21;
-        pub const purge = 30;
-        pub const purge_ok = 31;
-        pub const delete = 40;
-        pub const delete_ok = 41;
-        pub const unbind = 50;
-        pub const unbind_ok = 51;
+        pub const id: u16 = 50;
+        pub const Method = enum(u16) {
+            declare = 10,
+            declare_ok = 11,
+            bind = 20,
+            bind_ok = 21,
+            purge = 30,
+            purge_ok = 31,
+            delete = 40,
+            delete_ok = 41,
+            unbind = 50,
+            unbind_ok = 51,
+            pub fn asU16(self: @This()) u16 {
+                return @intFromEnum(self);
+            }
+        };
     };
     pub const Basic = struct {
-        pub const id = 60;
-        pub const qos = 10;
-        pub const qos_ok = 11;
-        pub const consume = 20;
-        pub const consume_ok = 21;
-        pub const cancel = 30;
-        pub const cancel_ok = 31;
-        pub const publish = 40;
-        pub const return_ = 50;
-        pub const deliver = 60;
-        pub const get = 70;
-        pub const get_ok = 71;
-        pub const get_empty = 72;
-        pub const ack = 80;
-        pub const reject = 90;
-        pub const recover_async = 100;
-        pub const recover = 110;
-        pub const recover_ok = 111;
+        pub const id: u16 = 60;
+        pub const Method = enum(u16) {
+            qos = 10,
+            qos_ok = 11,
+            consume = 20,
+            consume_ok = 21,
+            cancel = 30,
+            cancel_ok = 31,
+            publish = 40,
+            return_ = 50,
+            deliver = 60,
+            get = 70,
+            get_ok = 71,
+            get_empty = 72,
+            ack = 80,
+            reject = 90,
+            recover_async = 100,
+            recover = 110,
+            recover_ok = 111,
+            pub fn asU16(self: @This()) u16 {
+                return @intFromEnum(self);
+            }
+        };
     };
 };
 
@@ -67,19 +87,19 @@ pub const Frame = struct {
     //actual frame data, no header and endframe octet
     data: []u8,
     header: Header,
-
-    const Header = struct {
-        type: enum(u8) {
-            ProtocolHeader = 0,
-            Method = 1,
-            Header = 2,
-            Body = 3,
-            Heartbeat = 4,
-            Err = 5,
-            pub fn asU8(self: @This()) u8 {
-                return @intFromEnum(self);
-            }
-        },
+    pub const FrameType = enum(u8) {
+        ProtocolHeader = 0,
+        Method = 1,
+        Header = 2,
+        Body = 3,
+        Heartbeat = 4,
+        Err = 5,
+        pub fn asU8(self: @This()) u8 {
+            return @intFromEnum(self);
+        }
+    };
+    pub const Header = struct {
+        type: FrameType,
         channel_id: u16,
         len: u32,
     };
@@ -101,6 +121,7 @@ pub const Frame = struct {
         std.debug.assert(self.header.len > 4);
         std.mem.readInt(u16, @ptrCast(self.data[7..].ptr), .big);
     }
+
     pub fn classId(self: Frame) u16 {
         std.debug.assert(self.header.type == .Method);
         std.debug.assert(self.header.len > 4);
@@ -113,6 +134,24 @@ pub const Frame = struct {
         mem[0] = header.type.asU8();
         std.mem.writeInt(u16, @ptrCast(mem.ptr), 0, .big); //channel id
         std.mem.writeInt(u32, @ptrCast(mem[3..].ptr), header.len, .big); //size
+    }
+
+    pub fn fromAllocator(allocator: std.mem.Allocator, header: Header) !*Frame {
+        var frame = try allocator.create(Frame);
+        frame.header = header;
+        const buf = try allocator.alloc(u8, header.len + 8);
+        buf[buf.len - 1] = EndFrameOctet;
+        buf[0] = header.type.asU8();
+        std.mem.writeInt(u16, @ptrCast(buf[1..].ptr), header.channel_id, .big); //channel id
+        std.mem.writeInt(u32, @ptrCast(buf[3..].ptr), header.len, .big); //size
+        frame.data = buf;
+        return frame;
+    }
+
+    // use only in allocator-allocated frames;
+    pub fn deinit(self: *Frame, allocator: std.mem.Allocator) void {
+        allocator.free(self.data);
+        allocator.destroy(self);
     }
 
     pub fn fromHeaderAndByteSlice(header: Header, buf: []u8) !Frame {

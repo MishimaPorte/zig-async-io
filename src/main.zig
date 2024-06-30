@@ -27,13 +27,10 @@ pub fn main() !void {
     var tpool: [10]std.Thread = undefined;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa_allocator = gpa.allocator();
-    const out_fd = try posix.open("./testdata/text", .{ .ACCMODE = .RDONLY, .NONBLOCK = false }, 0o666);
     for (0..10) |i| {
-        // const out_fd = try posix.open("./testdata/text", .{ .ACCMODE = .RDONLY, .NONBLOCK = false }, 0o666);
-        tpool[i] = try std.Thread.spawn(.{}, worker.work, .{ &gpa_allocator, out_fd, epoll_fd, server.stream.handle, i + 1 });
+        tpool[i] = try std.Thread.spawn(.{}, worker.work, .{ gpa_allocator, epoll_fd, server.stream.handle, i + 1 });
         tpool[i].detach();
     }
-    // const out_fd = try posix.open("./testdata/text", .{ .ACCMODE = .RDONLY, .NONBLOCK = false }, 0o666);
-    worker.work(&gpa_allocator, out_fd, epoll_fd, server.stream.handle, 0);
+    worker.work(gpa_allocator, epoll_fd, server.stream.handle, 0);
     return void{};
 }
