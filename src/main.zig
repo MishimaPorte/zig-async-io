@@ -1,6 +1,6 @@
 const std = @import("std");
 const net = std.net;
-const worker = @import("worker.zig");
+const work = @import("connection.zig").work;
 const linux = std.os.linux;
 const posix = std.posix;
 
@@ -28,9 +28,9 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa_allocator = gpa.allocator();
     for (0..10) |i| {
-        tpool[i] = try std.Thread.spawn(.{}, worker.work, .{ gpa_allocator, epoll_fd, server.stream.handle, i + 1 });
+        tpool[i] = try std.Thread.spawn(.{}, work, .{ gpa_allocator, epoll_fd, server.stream.handle, i + 1 });
         tpool[i].detach();
     }
-    worker.work(gpa_allocator, epoll_fd, server.stream.handle, 0);
+    work(gpa_allocator, epoll_fd, server.stream.handle, 0);
     return void{};
 }

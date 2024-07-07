@@ -36,6 +36,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    exe.root_module.addOptions("build_config", opts: {
+        var opts = b.addOptions();
+        opts.addOption(usize, "max_channels_per_connection", 10);
+        opts.addOption(usize, "max_frame_size", 4096);
+        opts.addOption(usize, "heartbeat_rate", 0);
+        break :opts opts;
+    });
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
