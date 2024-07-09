@@ -39,8 +39,6 @@ fn Connection(
         login: []u8,
         /// virtual host that the client negotiated for this connection
         vhost: []u8,
-        channel_bitmap: ChannelBitmap,
-        channel_bitmap_mutex: std.Thread.Mutex,
         channels: [max_channels]Channel,
         const ChannelBitmap = std.PackedIntArray(u1, max_channels);
         const Conn = @This();
@@ -58,6 +56,7 @@ fn Connection(
         const ConnectionError = error{
             WrongState,
             TooManyChannels,
+            InvalidChannelId,
         };
 
         pub fn receive(self: *Conn, allocator: std.mem.Allocator, frame: *const Frame) !void {
@@ -98,7 +97,7 @@ fn Connection(
                 } else return error.WrongState,
                 .OPEN => if (frame.awaitClass(Class.Connection.id)) {
                     @panic("not implemented");
-                } else return self.handleSubConnectionFrame(frame),
+                } else return self.handleSubConnectionFrame(allocator, frame),
             };
         }
 
@@ -114,15 +113,9 @@ fn Connection(
             return error.TooManyChannels;
         }
 
-        fn handleSubConnectionFrame(self: *Conn, frame: *const Frame) !void {
-            // this is not channel id, but an index into an array of channel states that this connection manages.
-            var chan_index: u16 = 0;
-            if (frame.awaitMethod(Class.Channel.id, Class.Channel.Method.open.asU16())) {
-                chan_index = try getFreeChid(self.channel_bitmap);
-            } else {
-                chan_index = frame.header.channel_id;
-            }
-            try self.channels[chan_index].processFrame(frame);
+        fn handleSubConnectionFrame(self: *Conn, allocator: std.mem.Allocator, frame: *const Frame) !void {
+            if (frame.header.channel_id > max_channels) return error.InvalidChannelId;
+            try self.channels[frame.header.channel_id - 1].processFrame(allocator, frame);
         }
 
         fn sendOpenOk(self: *Conn, allocator: std.mem.Allocator) !void {
@@ -327,7 +320,7 @@ fn Connection(
         }
 
         // this is a thinnest possible writer to declare and interface with
-        pub inline fn sendFrame(self: *Conn, frame: *const Frame) !void {
+        pub inline fn sendFrame(self: *Conn, frame: *Frame) !void {
             try self.out_q.writeItem(frame);
         }
 
@@ -392,15 +385,10 @@ fn acceptNew(allocator: std.mem.Allocator, epoll_fd: i32, tid: usize, ev: linux.
     state.state = .None;
     state.fd_status = .reading;
     state.fd = fd;
-    for (&state.channels) |*chan| {
-        chan.state.store(.Preopen, .unordered);
-        chan.c = state;
-    }
     @memset(&state.channels, Channel{
-        .state = .{ .raw = .Preopen },
+        .state = .{ .raw = .Closed },
         .c = state,
     });
-    @memset(state.channel_bitmap.bytes, 0);
     state.out_q = std.fifo.LinearFifo(*Frame, .Dynamic).init(allocator);
     state.data = allocator.alloc(u8, 1024) catch |err| {
         posix.close(fd);

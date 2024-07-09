@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const Allocator = @import("std").mem.Allocator;
 const AmqpConnection = @import("connection.zig").AmqpConnection;
 const Frame = @import("frame.zig").Frame;
@@ -6,30 +8,37 @@ const Atomic = @import("std").atomic.Value;
 const Tuple = @import("std").meta.Tuple;
 
 pub const Channel = struct {
-    c: *const AmqpConnection,
+    c: *AmqpConnection,
     state: Atomic(ChannelState),
-    await_sending: packed struct(u32) {
-        cid: u16,
-        mid: u16,
-    },
 
     const ChannelState = enum(u8) {
-        Preopen,
         Open,
         Closed,
-        Cancelled,
     };
 
-    pub fn processFrame(self: *Channel, allocator: Allocator, frame: *const Frame) !void {
-        switch (self.state.load(.release)) {
-            .Preopen => if (frame.awaitMethod(Class.Channel.id, Class.Channel.Method.open.asU16())) {
-                try self.open(allocator, frame);
-            } else return error.WrongState,
-            .Open => return error.WrongState,
-            .Closed => return error.WrongState,
-            .Cancelled => return error.WrongState,
+    const ChannelError = error{
+        ChannelClosed,
+    };
+
+    fn processChannelFrame(_: *Channel, _: Allocator, frame: *const Frame) !void {
+        switch (@as(Class.Channel.Method, @enumFromInt(frame.methodId()))) {
+            else => {
+                std.debug.print("incoming channel frame: {any}\n", .{frame});
+            },
         }
-        self.c.sendFrame(frame);
+    }
+
+    pub fn processFrame(self: *Channel, allocator: Allocator, frame: *const Frame) !void {
+        switch (self.state.load(.acquire)) {
+            .Closed => if (frame.awaitMethod(Class.Channel.id, Class.Channel.Method.open.asU16())) {
+                try self.open(allocator, frame);
+            } else return error.ChannelClosed,
+            .Open => {
+                if (frame.awaitClass(Class.Channel.id)) try self.processChannelFrame(allocator, frame);
+                std.debug.print("frame incoming into an open channel: {any}\n", .{frame});
+                // return error.WrongState;
+            },
+        }
     }
 
     fn open(self: *Channel, allocator: Allocator, frame: *const Frame) !void {
@@ -38,8 +47,8 @@ pub const Channel = struct {
             .len = 8,
             .type = .Method,
         });
-        frame.setMethod(Class.Channel.id, Class.Channel.Method.open_ok.asU16());
-        self.c.sendFrame(resp);
-        self.state.store(.Open, .acquire);
+        resp.setMethod(Class.Channel.id, Class.Channel.Method.open_ok.asU16());
+        try self.c.sendFrame(resp);
+        self.state.store(.Open, .release);
     }
 };
