@@ -95,8 +95,18 @@ pub const Frame = struct {
         Body = 3,
         Heartbeat = 4,
         Err = 5,
-        pub fn asU8(self: @This()) u8 {
+        pub fn asU8(self: FrameType) u8 {
             return @intFromEnum(self);
+        }
+        pub fn asText(self: FrameType) []const u8 {
+            return switch (self) {
+                .ProtocolHeader => "ProtocolHeader",
+                .Method => "Method",
+                .Header => "Header",
+                .Body => "Body",
+                .Heartbeat => "Heartbeat",
+                .Err => "Err",
+            };
         }
     };
     pub const Header = struct {
@@ -108,6 +118,35 @@ pub const Frame = struct {
         EndFrameOctetMissing,
         NotEnoughBytes,
     };
+    pub fn log(self: *const Frame) !void {
+        const stdout = std.io.getStdOut();
+        try stdout.lock(.exclusive);
+        defer stdout.unlock();
+        const writer = stdout.writer();
+        try writer.print("[frame body]\n", .{});
+        try writer.print("\t.len = {}\n", .{self.data.len});
+        try writer.print("-" ** 76, .{});
+        try writer.print("\n", .{});
+        const columns = 16;
+        const rows = self.data.len / columns;
+        for (0..rows) |row| {
+            try writer.print("| {x:0>4} | ", .{row * 32});
+            for (self.data[row * columns .. (row + 1) * columns]) |byte| {
+                try writer.print("{x:0>2} ", .{byte});
+            }
+            try writer.print("| ", .{});
+            for (self.data[row * columns .. (row + 1) * columns]) |byte| {
+                if (std.ascii.isPrint(byte)) {
+                    try writer.print("{c}", .{byte});
+                } else {
+                    try writer.print(".", .{});
+                }
+            }
+            try writer.print(" |\n", .{});
+        }
+        try writer.print("-" ** 74, .{});
+        try writer.print("\n", .{});
+    }
     pub const EndFrameOctet: u8 = '\xce';
 
     pub fn bodyOffset(self: *const Frame, num: usize) []u8 {
@@ -118,8 +157,8 @@ pub const Frame = struct {
         return self.data[body_start + num ..].ptr;
     }
 
-    pub fn bodyArrayPtr(self: *const Frame, comptime offset: usize, comptime size: usize) *[size]u8 {
-        return @ptrCast(self.data[comptime body_start + offset..]);
+    pub fn bodyArrayPtr(self: *const Frame, offset: usize, comptime size: usize) *[size]u8 {
+        return @ptrCast(self.data[body_start + offset ..]);
     }
 
     pub fn setMethod(self: *Frame, class_id: u16, method_id: u16) void {

@@ -1,13 +1,24 @@
 const std = @import("std");
 
-pub const ReadError = error{ NotEnoughBytes, BadLetter };
+pub const ReadError = error{ NotEnoughBytes, BadLetter, TableEnd };
 pub const Value = struct {
     pub const Write = struct {
         // assumes it has enough space
         pub fn bigString(buf: []u8, string: []const u8) void {
             std.debug.assert(buf.len >= string.len + 4);
+            std.debug.assert(string.len <= std.math.maxInt(u32));
+
             std.mem.writeInt(u32, @ptrCast(buf.ptr), @intCast(string.len), .big);
             @memcpy(buf[4 .. 4 + string.len], string);
+        }
+
+        // assumes it has enough space
+        pub fn shortString(buf: []u8, string: []const u8) void {
+            std.debug.assert(buf.len >= string.len + 1);
+            std.debug.assert(string.len <= std.math.maxInt(u8));
+
+            buf[0] = @intCast(string.len);
+            @memcpy(buf[1 .. 1 + string.len], string);
         }
     };
 
@@ -76,7 +87,8 @@ pub const TableParser = struct {
         return .{ .buf = buf[4 .. len + 4] };
     }
 
-    pub fn nextValue(self: *TableParser) !V {
+    pub fn nextValue(self: *TableParser) ReadError!V {
+        if (self.buf.len == 0) return error.TableEnd;
         const name = try Value.Read.shortString(self.buf);
         self.buf = self.buf[name.len + 1 ..];
         if (self.buf.len == 0)
@@ -85,7 +97,7 @@ pub const TableParser = struct {
         switch (self.buf[0]) {
             // boolean
             't' => {
-                const val = self.buf[2] != 0;
+                const val = self.buf[1] != 0;
                 self.buf = self.buf[2..];
                 return .{ .name = name, .value = .{
                     .boolean = val,
@@ -94,29 +106,29 @@ pub const TableParser = struct {
 
             // ints
             'b' => {
-                const val: i8 = @intCast(self.buf[2]);
-                self.buf = self.buf[3..];
+                const val: i8 = @intCast(self.buf[1]);
+                self.buf = self.buf[2..];
                 return .{ .name = name, .value = .{
                     .int8 = val,
                 } };
             },
             'U' => {
-                const val = std.mem.readVarInt(i16, self.buf[2..4], .big);
-                self.buf = self.buf[4..];
+                const val = std.mem.readVarInt(i16, self.buf[1..3], .big);
+                self.buf = self.buf[3..];
                 return .{ .name = name, .value = .{
                     .int16 = val,
                 } };
             },
             'I' => {
-                const val = std.mem.readVarInt(i32, self.buf[2..6], .big);
-                self.buf = self.buf[6..];
+                const val = std.mem.readVarInt(i32, self.buf[1..5], .big);
+                self.buf = self.buf[5..];
                 return .{ .name = name, .value = .{
                     .int32 = val,
                 } };
             },
             'L' => {
-                const val = std.mem.readVarInt(i64, self.buf[2..10], .big);
-                self.buf = self.buf[10..];
+                const val = std.mem.readVarInt(i64, self.buf[1..9], .big);
+                self.buf = self.buf[9..];
                 return .{ .name = name, .value = .{
                     .int64 = val,
                 } };
@@ -124,29 +136,29 @@ pub const TableParser = struct {
 
             // uints
             'B' => {
-                const val = self.buf[2];
-                self.buf = self.buf[3..];
+                const val = self.buf[1];
+                self.buf = self.buf[2..];
                 return .{ .name = name, .value = .{
                     .uint8 = val,
                 } };
             },
             'u' => {
-                const val = std.mem.readVarInt(u16, self.buf[2..4], .big);
+                const val = std.mem.readVarInt(u16, self.buf[1..4], .big);
                 self.buf = self.buf[4..];
                 return .{ .name = name, .value = .{
                     .uint16 = val,
                 } };
             },
             'i' => {
-                const val = std.mem.readVarInt(u32, self.buf[2..6], .big);
-                self.buf = self.buf[6..];
+                const val = std.mem.readVarInt(u32, self.buf[1..5], .big);
+                self.buf = self.buf[5..];
                 return .{ .name = name, .value = .{
                     .uint32 = val,
                 } };
             },
             'l' => {
-                const val = std.mem.readVarInt(u64, self.buf[2..10], .big);
-                self.buf = self.buf[10..];
+                const val = std.mem.readVarInt(u64, self.buf[1..9], .big);
+                self.buf = self.buf[9..];
                 return .{ .name = name, .value = .{
                     .uint64 = val,
                 } };
@@ -155,7 +167,7 @@ pub const TableParser = struct {
             // void
             'V' => {
                 const val = void{};
-                self.buf = self.buf[2..];
+                self.buf = self.buf[1..];
                 return .{ .name = name, .value = .{
                     .void = val,
                 } };

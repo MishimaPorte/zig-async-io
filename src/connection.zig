@@ -51,6 +51,19 @@ fn Connection(
             WaitingOpen,
             OpenReceived,
             OPEN,
+
+            pub fn asText(self: ConnectionState) []const u8 {
+                return switch (self) {
+                    .None => "None",
+                    .ReceivedPH => "ReceivedPH",
+                    .WaitingStartOk => "WaitingStartOk",
+                    .StartOkReceived => "StartOkReceived",
+                    .WaitingTuneOk => "WaitingTuneOk",
+                    .WaitingOpen => "WaitingOpen",
+                    .OpenReceived => "OpenReceived",
+                    .OPEN => "OPEN",
+                };
+            }
         };
 
         const ConnectionError = error{
@@ -60,7 +73,7 @@ fn Connection(
         };
 
         pub fn receive(self: *Conn, allocator: std.mem.Allocator, frame: *const Frame) !void {
-            std.log.debug("frame incoming with header: {} on state {} on class id {} on method id {}", .{ frame.header, self.state, frame.classId(), frame.methodId() });
+            std.log.debug("frame incoming with type '{s}', on state '{s}' on class id {} on method id {}", .{ frame.header.type.asText(), self.state.asText(), frame.classId(), frame.methodId() });
             self.state = switch (self.state) {
                 // connection class is fully synchronous, so all the frames must come in order.
                 // state management is trivial in this case.
@@ -194,7 +207,7 @@ fn Connection(
                 self.num = self.num + written;
                 if (self.num == frame.data.len) {
                     const frm = self.out_q.readItem() orelse unreachable;
-                    std.log.debug("emitted a frame: {}", .{frm.header});
+                    std.log.debug("frame emitted with type '{s}', on state '{s}' on class id {} on method id {}", .{ frm.header.type.asText(), self.state.asText(), frm.classId(), frm.methodId() });
                     if (frm.classId() == Class.Connection.id) {
                         try self.transition(@enumFromInt(frm.methodId()));
                     }
@@ -271,7 +284,6 @@ fn Connection(
                 },
             };
             if (len == 8 and std.mem.eql(u8, self.data[0..8], &[8]u8{ 'A', 'M', 'Q', 'P', 0, 0, 9, 1 })) {
-                std.log.debug("t[{d}]: protocol header accepted!: \"{s}\"", .{ tid, self.data[0..8] });
                 if (self.state == .None) self.state = .ReceivedPH else {
                     return error.WrongState;
                 }
