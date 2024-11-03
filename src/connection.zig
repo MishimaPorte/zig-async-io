@@ -351,7 +351,7 @@ fn Connection(
         }
     };
 }
-const build_config = @import("build_config");
+const build_config = @import("__Build_Config");
 pub const AmqpConnection = Connection(
     build_config.max_channels_per_connection,
     build_config.max_frame_size,

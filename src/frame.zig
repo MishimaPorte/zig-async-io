@@ -149,38 +149,38 @@ pub const Frame = struct {
     }
     pub const EndFrameOctet: u8 = '\xce';
 
-    pub fn bodyOffset(self: *const Frame, num: usize) []u8 {
+    pub inline fn bodyOffset(self: *const Frame, num: usize) []u8 {
         return self.data[body_start + num ..];
     }
 
-    pub fn bodyOffsetPtr(self: *const Frame, num: usize) [*]u8 {
+    pub inline fn bodyOffsetPtr(self: *const Frame, num: usize) [*]u8 {
         return self.data[body_start + num ..].ptr;
     }
 
-    pub fn bodyArrayPtr(self: *const Frame, offset: usize, comptime size: usize) *[size]u8 {
+    pub inline fn bodyArrayPtr(self: *const Frame, offset: usize, comptime size: usize) *[size]u8 {
         return @ptrCast(self.data[body_start + offset ..]);
     }
 
-    pub fn setMethod(self: *Frame, class_id: u16, method_id: u16) void {
+    pub inline fn setMethod(self: *Frame, class_id: u16, method_id: u16) void {
         std.debug.assert(self.header.type == .Method);
         std.debug.assert(self.header.len > 4);
         std.mem.writeInt(u16, @ptrCast(self.data[7..].ptr), class_id, .big); //channel id
         std.mem.writeInt(u16, @ptrCast(self.data[9..].ptr), method_id, .big); //channel id
     }
 
-    pub fn classId(self: Frame) u16 {
+    pub inline fn classId(self: Frame) u16 {
         std.debug.assert(self.header.type == .Method);
         std.debug.assert(self.header.len > 4);
         return std.mem.readInt(u16, @ptrCast(self.data[7..9].ptr), .big);
     }
 
-    pub fn methodId(self: Frame) u16 {
+    pub inline fn methodId(self: Frame) u16 {
         std.debug.assert(self.header.type == .Method);
         std.debug.assert(self.header.len > 4);
         return std.mem.readVarInt(u16, self.data[9..11], .big);
     }
 
-    pub fn fromHeader(allocator: *std.mem.Allocator, header: Header) !Frame {
+    pub inline fn fromHeader(allocator: *std.mem.Allocator, header: Header) !Frame {
         var mem = try allocator.alloc(u8, header.len + 8);
         mem[mem.len - 1] = EndFrameOctet;
         mem[0] = header.type.asU8();
@@ -188,7 +188,7 @@ pub const Frame = struct {
         std.mem.writeInt(u32, @ptrCast(mem[3..].ptr), header.len, .big); //size
     }
 
-    pub fn awaitMethod(self: *const Frame, comptime class_id: u16, comptime meth_id: u16) bool {
+    pub inline fn awaitMethod(self: *const Frame, comptime class_id: u16, comptime meth_id: u16) bool {
         switch (self.header.type) {
             .Method => switch (self.classId()) {
                 class_id => switch (self.methodId()) {
@@ -201,7 +201,7 @@ pub const Frame = struct {
         }
     }
 
-    pub fn awaitClass(self: *const Frame, comptime class_id: u16) bool {
+    pub inline fn awaitClass(self: *const Frame, comptime class_id: u16) bool {
         switch (self.header.type) {
             .Method => switch (self.classId()) {
                 class_id => return true,

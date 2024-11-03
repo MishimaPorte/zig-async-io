@@ -3,6 +3,7 @@ const net = std.net;
 const work = @import("connection.zig").work;
 const linux = std.os.linux;
 const posix = std.posix;
+const workerthreadcount = @import("__Build_Config").workerthreadcount;
 
 pub fn main() !void {
     const listen_address = net.Address.initIp4(.{ 127, 0, 0, 1 }, 2282);
@@ -27,7 +28,7 @@ pub fn main() !void {
     var tpool: [10]std.Thread = undefined;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa_allocator = gpa.allocator();
-    for (0..10) |i| {
+    for (0..workerthreadcount) |i| {
         tpool[i] = try std.Thread.spawn(.{}, work, .{ gpa_allocator, epoll_fd, server.stream.handle, i + 1 });
         tpool[i].detach();
     }
