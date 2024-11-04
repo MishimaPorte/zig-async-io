@@ -8,6 +8,19 @@ const log = @import("std").log;
 const Allocator = @import("std").mem.Allocator;
 const mem = @import("std").mem;
 
+pub const Queue = struct {
+    name: []u8,
+    memory: [*]u8,
+};
+
+//______________________________
+//|full_len 8b | header len 8b |
+//|----------------------------|
+//| ss-key | ss-val | repeats  |
+//|----------------------------|
+//|body <opaque>               |
+//|____________________________|
+
 pub fn declare(chan: *Channel, allocator: Allocator, frame: *const Frame) !void {
     // one byte at the beginning is reserved
     const q_name = try Read.shortString(frame.bodyOffset(2));

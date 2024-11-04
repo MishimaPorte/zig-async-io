@@ -54,8 +54,6 @@ test "static table returns an error when underlying buffer has no space" {
     try std.testing.expectError(error.NotEnoughMemory, st.addStringField("kek", "lol"));
 }
 
-const kek_param = true;
-
 // a struct to parse table strings
 pub const TableParser = struct {
     buf: []u8,

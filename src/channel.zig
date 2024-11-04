@@ -7,10 +7,13 @@ const Class = @import("frame.zig").Class;
 const Atomic = @import("std").atomic.Value;
 const Tuple = @import("std").meta.Tuple;
 const Queue = @import("Queue.zig");
+const Basic = @import("Basic.zig");
 
 pub const Channel = struct {
     c: *AmqpConnection,
     state: Atomic(ChannelState),
+    prefetch_size: u32 = 0,
+    prefetch_count: u16 = 0,
 
     const ChannelState = enum(u8) {
         Open,
@@ -56,7 +59,10 @@ pub const Channel = struct {
                         std.log.err("received queue frame: {}", .{frame.methodId()});
                         try self.processQueueFrame(allocator, frame);
                     },
-                    Class.Basic.id => return error.WrongState,
+                    Class.Basic.id => {
+                        std.log.err("received basic frame: {}", .{frame.methodId()});
+                        try self.processBasicFrame(allocator, frame);
+                    },
                     else => return error.UnsupportedMethod,
                 }
                 // return error.WrongState;
@@ -64,20 +70,25 @@ pub const Channel = struct {
         }
     }
 
+    fn processBasicFrame(self: *Channel, allocator: Allocator, frame: *const Frame) !void {
+        const BasicMethod = Class.Basic.Method;
+        return switch (frame.methodId()) {
+            BasicMethod.qos.asU16() => Basic.qos(self, allocator, frame),
+            BasicMethod.consume.asU16() => Basic.consume(self, allocator, frame),
+            else => error.UnsupportedMethod,
+        };
+    }
     fn processQueueFrame(self: *Channel, allocator: Allocator, frame: *const Frame) !void {
         const QueueMethod = Class.Queue.Method;
-        switch (frame.methodId()) {
-            QueueMethod.declare.asU16() => {
-                try Queue.declare(self, allocator, frame);
-            },
-            QueueMethod.bind.asU16() => return error.WrongState,
-            QueueMethod.purge.asU16() => return error.WrongState,
-            QueueMethod.delete.asU16() => return error.WrongState,
-            QueueMethod.unbind.asU16() => return error.WrongState,
-
+        return switch (frame.methodId()) {
+            QueueMethod.declare.asU16() => Queue.declare(self, allocator, frame),
+            QueueMethod.bind.asU16() => error.WrongState,
+            QueueMethod.purge.asU16() => error.WrongState,
+            QueueMethod.delete.asU16() => error.WrongState,
+            QueueMethod.unbind.asU16() => error.WrongState,
             // all oks are exclusively server-generated
-            else => return error.UnsupportedMethod,
-        }
+            else => error.UnsupportedMethod,
+        };
     }
 
     fn open(self: *Channel, allocator: Allocator, frame: *const Frame) !void {

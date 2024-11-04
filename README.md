@@ -22,8 +22,10 @@ Sorry for the OOP it was not my idea to do the NETWORK PROTOCOL this way.
 - [x] queue.declare
 - [x] queue.declare_ok
 #### Class Basic:
-- [ ] basic.qos
-- [ ] basic.consume
+- [x] basic.qos
+- [x] basic.qos_ok
+- [x] basic.consume
+- [x] basic.consume_ok
 - [ ] basic.cancel
 - [ ] basic.deliver
 - [ ] basic.publish

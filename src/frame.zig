@@ -189,26 +189,26 @@ pub const Frame = struct {
     }
 
     pub inline fn awaitMethod(self: *const Frame, comptime class_id: u16, comptime meth_id: u16) bool {
-        switch (self.header.type) {
+        return switch (self.header.type) {
             .Method => switch (self.classId()) {
                 class_id => switch (self.methodId()) {
-                    meth_id => return true,
-                    else => return false,
+                    meth_id => true,
+                    else => false,
                 },
-                else => return false,
+                else => false,
             },
-            else => return false, // returning wrong state everywhere is bad but not that bad
-        }
+            else => false, // returning wrong state everywhere is bad but not that bad
+        };
     }
 
     pub inline fn awaitClass(self: *const Frame, comptime class_id: u16) bool {
-        switch (self.header.type) {
+        return switch (self.header.type) {
             .Method => switch (self.classId()) {
-                class_id => return true,
-                else => return false,
+                class_id => true,
+                else => false,
             },
-            else => return false, // returning wrong state everywhere is bad but not that bad
-        }
+            else => false, // returning wrong state everywhere is bad but not that bad
+        };
     }
 
     pub fn fromAllocator(allocator: std.mem.Allocator, header: Header) !*Frame {
